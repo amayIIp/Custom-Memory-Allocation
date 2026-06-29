@@ -54,7 +54,6 @@ PoolAllocator::PoolAllocator(std::size_t num_chunks, std::size_t chunk_size, std
         std::size_t min_chunk = std::max(chunk_size, sizeof(Node));
         m_chunk_size = align_forward(min_chunk, chunk_alignment);
         
-        // Allocate the initial block
         std::size_t required_size = num_chunks * m_chunk_size + chunk_alignment;
         void* buffer = std::malloc(required_size);
         if (buffer) {
@@ -115,7 +114,6 @@ PoolAllocator::PoolAllocator(PoolAllocator&& other) noexcept
 
 PoolAllocator& PoolAllocator::operator=(PoolAllocator&& other) noexcept {
     if (this != &other) {
-        // Free current backing blocks
         BackingBlock* curr = m_backing_blocks;
         while (curr != nullptr) {
             BackingBlock* next = curr->next;
@@ -199,10 +197,8 @@ void PoolAllocator::deallocate(void* ptr, [[maybe_unused]] std::size_t size) noe
     [[maybe_unused]] std::uintptr_t addr = reinterpret_cast<std::uintptr_t>(ptr);
 
 #ifndef NDEBUG
-    // Validate that ptr belongs to this PoolAllocator
     bool is_valid_pointer = false;
     
-    // Check initial user buffer
     if (m_raw_buffer) {
         std::uintptr_t raw_start = reinterpret_cast<std::uintptr_t>(m_raw_buffer);
         if (addr >= raw_start && addr < raw_start + m_raw_size) {
@@ -210,7 +206,6 @@ void PoolAllocator::deallocate(void* ptr, [[maybe_unused]] std::size_t size) noe
         }
     }
     
-    // Check backing blocks
     BackingBlock* curr = m_backing_blocks;
     while (curr != nullptr && !is_valid_pointer) {
         std::uintptr_t block_start = reinterpret_cast<std::uintptr_t>(curr->ptr);
@@ -252,7 +247,6 @@ void PoolAllocator::rebuild_free_list() noexcept {
     m_free_list = nullptr;
     m_free_chunks = 0;
 
-    // 1. Thread the initial user-provided buffer if it exists
     if (m_raw_buffer && m_aligned_start) {
         std::uintptr_t raw_end = reinterpret_cast<std::uintptr_t>(m_raw_buffer) + m_raw_size;
         if (m_aligned_start < raw_end) {
@@ -271,11 +265,10 @@ void PoolAllocator::rebuild_free_list() noexcept {
         }
     }
 
-    // 2. Thread all backing blocks in the list
     BackingBlock* curr = m_backing_blocks;
     while (curr != nullptr) {
         std::uintptr_t aligned_start = align_forward(reinterpret_cast<std::uintptr_t>(curr->ptr), m_chunk_alignment);
-        Node* prev = m_free_list; // Prepend to existing free list
+        Node* prev = m_free_list;
         for (std::size_t i = 0; i < m_init_num_chunks; ++i) {
             std::uintptr_t chunk_addr = aligned_start + i * m_chunk_size;
             Node* node = reinterpret_cast<Node*>(chunk_addr);

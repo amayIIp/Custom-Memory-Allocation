@@ -84,7 +84,6 @@ void* ArenaAllocator::allocate(std::size_t size, std::size_t alignment) noexcept
 
     std::uintptr_t curr_aligned = align_forward(m_curr, alignment);
     
-    // Overflow or bounds checking
     if (curr_aligned < m_curr || 
         curr_aligned + actual_size < curr_aligned || 
         curr_aligned + actual_size > m_start + m_size) [[unlikely]] {

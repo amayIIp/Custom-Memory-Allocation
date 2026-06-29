@@ -24,25 +24,21 @@ int main() {
     std::cout << "Particle System & Frame Simulation Use Case\n";
     std::cout << "========================================================\n\n";
 
-    // Pool Allocator for managing individual Particle lifetimes (up to 1000 particles)
     constexpr int MAX_PARTICLES = 1000;
     custom_alloc::PoolAllocator particle_pool(MAX_PARTICLES, sizeof(Particle), alignof(Particle), false);
 
-    // Arena Allocator for transient per-frame collision events & logs (reset each frame)
     constexpr std::size_t TRANSIENT_ARENA_SIZE = 64 * 1024; // 64 KB
     custom_alloc::ArenaAllocator frame_arena(TRANSIENT_ARENA_SIZE);
 
     std::vector<Particle*> active_particles;
     active_particles.reserve(MAX_PARTICLES);
 
-    // Simple LCG random generator for simulation determinism
     std::uint32_t seed = 999;
     auto get_rand_float = [&seed]() {
         seed = seed * 1664525u + 1013904223u;
         return static_cast<float>(seed % 10000) / 10000.0f;
     };
 
-    // Spawn initial particles
     for (int i = 0; i < 200; ++i) {
         Particle* p = custom_alloc::create<Particle>(particle_pool);
         if (p) {
@@ -58,12 +54,10 @@ int main() {
 
     std::cout << "Initially spawned " << active_particles.size() << " particles.\n";
 
-    // Simulate 5 frames
-    constexpr float dt = 0.016f; // 16ms per frame (60fps)
+    constexpr float dt = 0.016f;
     for (int frame = 1; frame <= 5; ++frame) {
         std::cout << "\n--- Frame " << frame << " ---\n";
 
-        // 1. Update particles and handle death
         std::vector<Particle*> live_particles;
         int deaths = 0;
         for (Particle* p : active_particles) {
@@ -81,7 +75,6 @@ int main() {
         active_particles = std::move(live_particles);
         std::cout << "Particles updated. Live: " << active_particles.size() << " (Deaths: " << deaths << ")\n";
 
-        // 2. Spawn new particles to replace dead ones
         int spawns = 0;
         while (active_particles.size() < 200) {
             Particle* p = custom_alloc::create<Particle>(particle_pool);
@@ -100,8 +93,6 @@ int main() {
         }
         std::cout << "Spawned " << spawns << " new particles.\n";
 
-        // 3. Transient allocations in the frame arena (e.g. check collisions)
-        // We log transient collision events into the Arena without worrying about deallocation overhead.
         int simulated_collisions = 0;
         std::vector<CollisionEvent*> collisions_this_frame;
 
@@ -138,13 +129,10 @@ int main() {
 
         std::cout << "Arena memory used for frame transient events: " << frame_arena.used_bytes() << " bytes.\n";
 
-        // 4. Reset transient arena at the end of the frame!
-        // This is extremely cheap (O(1)) and invalidates all collision event allocations at once.
         frame_arena.reset();
         std::cout << "Arena reset. Used bytes: " << frame_arena.used_bytes() << "\n";
     }
 
-    // Clean up remaining particles at simulation shutdown
     for (Particle* p : active_particles) {
         custom_alloc::destroy(particle_pool, p);
     }
